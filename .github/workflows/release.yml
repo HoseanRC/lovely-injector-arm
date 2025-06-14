@@ -85,14 +85,20 @@ jobs:
           echo "CC_arm_unknown_linux_gnueabihf=arm-linux-gnueabihf-gcc" >> $GITHUB_ENV
           echo "CXX_arm_unknown_linux_gnueabihf=arm-linux-gnueabihf-g++" >> $GITHUB_ENV
           echo "AR_arm_unknown_linux_gnueabihf=arm-linux-gnueabihf-ar" >> $GITHUB_ENV
+          echo "CFLAGS_arm_unknown_linux_gnueabihf=-D__has_feature(x)=0" >> $GITHUB_ENV
+          echo "CXXFLAGS_arm_unknown_linux_gnueabihf=-D__has_feature(x)=0" >> $GITHUB_ENV
           
           echo "CC_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-gcc" >> $GITHUB_ENV
           echo "CXX_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-g++" >> $GITHUB_ENV
           echo "AR_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-ar" >> $GITHUB_ENV
+          echo "CFLAGS_armv7_unknown_linux_gnueabihf=-D__has_feature(x)=0" >> $GITHUB_ENV
+          echo "CXXFLAGS_armv7_unknown_linux_gnueabihf=-D__has_feature(x)=0" >> $GITHUB_ENV
           
           echo "CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
           echo "CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++" >> $GITHUB_ENV
           echo "AR_aarch64_unknown_linux_gnu=aarch64-linux-gnu-ar" >> $GITHUB_ENV
+          echo "CFLAGS_aarch64_unknown_linux_gnu=-D__has_feature(x)=0" >> $GITHUB_ENV
+          echo "CXXFLAGS_aarch64_unknown_linux_gnu=-D__has_feature(x)=0" >> $GITHUB_ENV
 
       - name: Build
         run: cargo build --target ${{ matrix.target }} --package lovely-unix --release
