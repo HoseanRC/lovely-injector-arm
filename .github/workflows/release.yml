@@ -157,7 +157,7 @@ jobs:
         run: >-
           gh release upload ${{ github.ref_name }} lovely-${{ matrix.target }}.tar.gz
 
-    build-android:
+  build-android:
     needs: prepare
     strategy:
       matrix:
@@ -177,7 +177,6 @@ jobs:
           target: ${{ matrix.target }}
 
       - name: Install Android NDK
-        # Corrected action: using nttld/setup-ndk
         uses: nttld/setup-ndk@v1
         with:
           ndk-version: r26c # Or a specific version, e.g., 'r26c', or 'latest' if you want the newest (though explicit is often better for reproducibility)
