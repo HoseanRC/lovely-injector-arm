@@ -157,7 +157,7 @@ jobs:
         run: >-
           gh release upload ${{ github.ref_name }} lovely-${{ matrix.target }}.tar.gz
 
-  build-android:
+    build-android:
     needs: prepare
     strategy:
       matrix:
@@ -177,9 +177,10 @@ jobs:
           target: ${{ matrix.target }}
 
       - name: Install Android NDK
-        uses: android-actions/setup-ndk@v2
+        # Corrected action: using nttld/setup-ndk
+        uses: nttld/setup-ndk@v1
         with:
-          ndk-version: latest # Or a specific version like '23.1.7779620'
+          ndk-version: r26c # Or a specific version, e.g., 'r26c', or 'latest' if you want the newest (though explicit is often better for reproducibility)
 
       - name: Install cargo-ndk
         run: cargo install cargo-ndk --version 2.7.0 # or latest compatible version
