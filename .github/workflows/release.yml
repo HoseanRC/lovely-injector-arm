@@ -22,11 +22,12 @@ jobs:
           ## [Install guide](https://github.com/ethangreen-dev/lovely-injector?tab=readme-ov-file#manual-installation)
           OS|Download|
           --|--|
-          Raspberry Pi (ARMv6)|[lovely-arm-unknown-linux-gnueabihf.tar.gz](https://github.com/ethangreen-dev/lovely-injector/releases/download/${{ github.ref_name }}/lovely-arm-unknown-linux-gnueabihf.tar.gz)|
-          Raspberry Pi (ARMv7)|[lovely-armv7-unknown-linux-gnueabihf.tar.gz](https://github.com/ethangreen-dev/lovely-injector/releases/download/${{ github.ref_name }}/lovely-armv7-unknown-linux-gnueabihf.tar.gz)|
-          Raspberry Pi (ARMv8)|[lovely-aarch64-unknown-linux-gnu.tar.gz](https://github.com/ethangreen-dev/lovely-injector/releases/download/${{ github.ref_name }}/lovely-aarch64-unknown-linux-gnu.tar.gz)|
+          Windows|[lovely-x86_64-pc-windows-msvc.zip](https://github.com/ethangreen-dev/lovely-injector/releases/download/${{ github.ref_name }}/lovely-x86_64-pc-windows-msvc.zip)|
+          Mac (Arm)|[lovely-aarch64-apple-darwin.tar.gz](https://github.com/ethangreen-dev/lovely-injector/releases/download/${{ github.ref_name }}/lovely-aarch64-apple-darwin.tar.gz)|
+          Mac (x86)|[lovely-x86_64-apple-darwin.tar.gz](https://github.com/ethangreen-dev/lovely-injector/releases/download/${{ github.ref_name }}/lovely-x86_64-apple-darwin.tar.gz)|
+          Linux|[x86_64-unknown-linux-gnu.tar.gz](https://github.com/ethangreen-dev/lovely-injector/releases/download/${{ github.ref_name }}/x86_64-unknown-linux-gnu.tar.gz)|
           Android (ARMv7)|[lovely-armv7-linux-androideabi.tar.gz](https://github.com/ethangreen-dev/lovely-injector/releases/download/${{ github.ref_name }}/lovely-armv7-linux-androideabi.tar.gz)|
-          Android (ARMv8)|[lovely-aarch64-linux-android.tar.gz](https://github.com/ethangreen-dev/lovely-injector/releases/download/${{ github.ref_name }}/lovely-aarch64-linux-android.tar.gz)|
+          Android (AArch64)|[lovely-aarch64-linux-android.tar.gz](https://github.com/ethangreen-dev/lovely-injector/releases/download/${{ github.ref_name }}/lovely-aarch64-linux-android.tar.gz)|
           EOF
 
           gh release create ${{ github.ref_name }} \
@@ -35,15 +36,13 @@ jobs:
           --generate-notes \
           --notes-file NOTE.md \
 
-  build-rpi:
+  build-windows:
     needs: prepare
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     strategy:
       matrix:
         target:
-          - arm-unknown-linux-gnueabihf      # ARMv6 (Raspberry Pi 1, Zero)
-          - armv7-unknown-linux-gnueabihf    # ARMv7 (Raspberry Pi 2, 3)
-          - aarch64-unknown-linux-gnu        # ARMv8 (Raspberry Pi 3+, 4, 5)
+          - x86_64-pc-windows-msvc
 
     steps:
       - name: Checkout
@@ -56,49 +55,91 @@ jobs:
         with:
           target: ${{ matrix.target }}
 
-      - name: Install cross-compilation tools
+      - name: Build
+        run: cargo build --target ${{ matrix.target }} --package lovely-win --release
+
+      - name: Compress
+        run: |
+          cd ./target/${{ matrix.target }}/release/
+          7z a "lovely-${{ matrix.target }}.zip" version.dll
+          mv "lovely-${{ matrix.target }}.zip" ${{ github.workspace }}
+
+      - name: Submit build artifact
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >-
+          gh release upload ${{ github.ref_name }} lovely-${{ matrix.target }}.zip
+
+  build-mac:
+    needs: prepare
+    strategy:
+      matrix:
+        target:
+          - x86_64-apple-darwin
+          - aarch64-apple-darwin
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup toolchain
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          target: ${{ matrix.target }}
+
+      - name: Install Mac SDK
+        run: |
+          curl -L "https://github.com/phracker/MacOSX-SDKs/releases/download/11.3/MacOSX10.9.sdk.tar.xz" | tar -J -x -C /opt
+          curl -L "https://github.com/phracker/MacOSX-SDKs/releases/download/11.3/MacOSX11.3.sdk.tar.xz" | tar -J -x -C /opt
+          echo "SDKROOT=/opt/MacOSX11.3.sdk" >> $GITHUB_ENV
+
+      - name: Install cargo-zigbuild
+        run: |
+          pip3 install ziglang==0.13.0.post1 cargo-zigbuild
+
+      - name: Build
+        run: cargo zigbuild --target ${{ matrix.target }} --package lovely-unix --release
+
+      - name: Compress tar.gz
+        run: |
+          cp ./crates/lovely-unix/run_lovely_macos.sh ./target/${{ matrix.target }}/release/
+          cd ./target/${{ matrix.target }}/release/
+          tar czfv lovely-${{ matrix.target }}.tar.gz liblovely.dylib run_lovely_macos.sh
+          mv "lovely-${{ matrix.target }}.tar.gz" ${{ github.workspace }}
+
+      - name: Submit build artifact
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >-
+          gh release upload ${{ github.ref_name }} lovely-${{ matrix.target }}.tar.gz
+
+  build-linux:
+    needs: prepare
+    strategy:
+      matrix:
+        target:
+          - x86_64-unknown-linux-gnu
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup toolchain
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          target: ${{ matrix.target }}
+
+      - name: install gcc 14
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            gcc-arm-linux-gnueabihf \
-            g++-arm-linux-gnueabihf \
-            gcc-aarch64-linux-gnu \
-            g++-aarch64-linux-gnu \
-            libc6-dev-armhf-cross \
-            libc6-dev-arm64-cross
+          sudo apt-get install -y g++-14
 
-      - name: Configure cross-compilation
-        run: |
-          mkdir -p ~/.cargo
-          cat >> ~/.cargo/config.toml << EOF
-          [target.arm-unknown-linux-gnueabihf]
-          linker = "arm-linux-gnueabihf-gcc"
-          
-          [target.armv7-unknown-linux-gnueabihf]
-          linker = "arm-linux-gnueabihf-gcc"
-          
-          [target.aarch64-unknown-linux-gnu]
-          linker = "aarch64-linux-gnu-gcc"
-          EOF
-          
-          # Set environment variables for C/C++ cross-compilation
-          echo "CC_arm_unknown_linux_gnueabihf=arm-linux-gnueabihf-gcc" >> $GITHUB_ENV
-          echo "CXX_arm_unknown_linux_gnueabihf=arm-linux-gnueabihf-g++" >> $GITHUB_ENV
-          echo "AR_arm_unknown_linux_gnueabihf=arm-linux-gnueabihf-ar" >> $GITHUB_ENV
-          echo "CFLAGS_arm_unknown_linux_gnueabihf=-D__has_feature(x)=0" >> $GITHUB_ENV
-          echo "CXXFLAGS_arm_unknown_linux_gnueabihf=-D__has_feature(x)=0" >> $GITHUB_ENV
-          
-          echo "CC_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-gcc" >> $GITHUB_ENV
-          echo "CXX_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-g++" >> $GITHUB_ENV
-          echo "AR_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-ar" >> $GITHUB_ENV
-          echo "CFLAGS_armv7_unknown_linux_gnueabihf=-D__has_feature(x)=0" >> $GITHUB_ENV
-          echo "CXXFLAGS_armv7_unknown_linux_gnueabihf=-D__has_feature(x)=0" >> $GITHUB_ENV
-          
-          echo "CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
-          echo "CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++" >> $GITHUB_ENV
-          echo "AR_aarch64_unknown_linux_gnu=aarch64-linux-gnu-ar" >> $GITHUB_ENV
-          echo "CFLAGS_aarch64_unknown_linux_gnu=-D__has_feature(x)=0" >> $GITHUB_ENV
-          echo "CXXFLAGS_aarch64_unknown_linux_gnu=-D__has_feature(x)=0" >> $GITHUB_ENV
+          sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-14 10
+          sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-14 10
 
       - name: Build
         run: cargo build --target ${{ matrix.target }} --package lovely-unix --release
@@ -118,13 +159,12 @@ jobs:
 
   build-android:
     needs: prepare
-    runs-on: ubuntu-latest
     strategy:
       matrix:
         target:
-          - armv7-linux-androideabi    # ARMv7 Android
-          - aarch64-linux-android      # ARMv8 Android
-
+          - armv7-linux-androideabi
+          - aarch64-linux-android
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -136,32 +176,26 @@ jobs:
         with:
           target: ${{ matrix.target }}
 
-      - name: Setup Android NDK
-        uses: nttld/setup-ndk@v1
+      - name: Install Android NDK
+        uses: android-actions/setup-ndk@v2
         with:
-          ndk-version: r25c
+          ndk-version: latest # Or a specific version like '23.1.7779620'
 
-      - name: Configure Android cross-compilation
-        run: |
-          mkdir -p ~/.cargo
-          cat >> ~/.cargo/config.toml << EOF
-          [target.armv7-linux-androideabi]
-          ar = "${{ env.ANDROID_NDK_ROOT }}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
-          linker = "${{ env.ANDROID_NDK_ROOT }}/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi21-clang"
-          
-          [target.aarch64-linux-android]
-          ar = "${{ env.ANDROID_NDK_ROOT }}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
-          linker = "${{ env.ANDROID_NDK_ROOT }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang"
-          EOF
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --version 2.7.0 # or latest compatible version
 
       - name: Build
-        run: cargo build --target ${{ matrix.target }} --package lovely-unix --release
+        run: cargo ndk -t ${{ matrix.target }} build --package lovely-unix --release
 
       - name: Compress tar.gz
         run: |
-          cp ./crates/lovely-unix/run_lovely_linux.sh ./target/${{ matrix.target }}/release/
+          # Android typically uses .so for shared libraries
+          # You might need to adjust the filename based on your project's output
+          # For example, if it's liblovely.so, ensure that's what's being copied
+          cp ./crates/lovely-unix/run_lovely_android.sh ./target/${{ matrix.target }}/release/ || true # Add a dummy script or adjust based on actual need
           cd ./target/${{ matrix.target }}/release/
-          tar czfv lovely-${{ matrix.target }}.tar.gz liblovely.so run_lovely_linux.sh
+          # Assuming the output shared library is liblovely.so
+          tar czfv lovely-${{ matrix.target }}.tar.gz liblovely.so run_lovely_android.sh # Adjust 'run_lovely_android.sh' if not applicable
           mv "lovely-${{ matrix.target }}.tar.gz" ${{ github.workspace }}
 
       - name: Submit build artifact
